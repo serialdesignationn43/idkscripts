@@ -4753,19 +4753,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		local PropertyName, ValueType, CanRead, Special =
 			property.Name, property.ValueType, property.CanRead, property.Special
 
-		-- Hot path
-		if
-			Anonymizers == nil
-			and InstancesOverrides[instance] == nil
-			and CanRead == true
-			and not Special
-			and not (ValueType == "ProtectedString" and PropertyName == "Source")
-		then
-			return instance[PropertyName]
-		end
-
-		local raw = __BREAK
-
+		-- 1. Check custom overrides first (MeshId, DoubleSided, etc.)
 		local InstanceOverride = InstancesOverrides[instance]
 		if InstanceOverride then
 			local PropertiesOverride = InstanceOverride.Properties
@@ -4777,11 +4765,32 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 			end
 		end
 
+		-- 2. Safe-guarded hot path
+		if
+			Anonymizers == nil
+			and InstanceOverride == nil
+			and CanRead == true
+			and not Special
+			and not (ValueType == "ProtectedString" and PropertyName == "Source")
+		then
+			local ok, val = pcall(index, instance, PropertyName)
+			return ok and val or __BREAK
+		end
+
 		if ValueType == "ProtectedString" and PropertyName == "Source" and isLuaSourceContainer(instance) then
 			return sourceFor(instance, decompileIgnoreMap[instance])
 		end
 
 		local Category, Optional = property.Category, property.Optional
+		local raw = __BREAK
+
+		-- 3. Skip properties that UnionOperation does not natively have
+		if InstanceOverride and instance:IsA("UnionOperation") then
+			local ok, test = pcall(index, instance, PropertyName)
+			if not ok and not (gethiddenproperty and ghpDatatypeAllowed((Category == "Enum" or Category == "Class") and Category or ValueType)) then
+				return __BREAK
+			end
+		end
 
 		if CanRead ~= false then
 			local GHPKey = (Category == "Enum" or Category == "Class") and Category or ValueType
@@ -4811,7 +4820,12 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 					end
 				end
 			elseif CanRead then
-				raw = instance[PropertyName]
+				local ok, result = pcall(index, instance, PropertyName)
+				if ok then
+					raw = result
+				else
+					raw = __BREAK
+				end
 			else
 				local ok, result = pcall(index, instance, PropertyName)
 				if ok then
@@ -4838,7 +4852,6 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 		end
 
 		-- Fallback chain
-
 		local GHPFFailed, Fallback = property.GHPFFailed, property.Fallback
 		if GHPFFailed and not Fallback then
 			return __BREAK
@@ -4986,20 +4999,10 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 					tagOverride = "MeshPart"
 
 					override = {
-						__Synthetic = true, -- Tells USSI to only read the Properties table below
 						Properties = {
-							Name = instance.Name,
 							MeshId = meshId,
-							Size = instance.Size,
-							CFrame = instance.CFrame,
-							Color = instance.Color,
-							Material = instance.Material,
-							Transparency = instance.Transparency,
 							DoubleSided = true,
 							RenderFidelity = Enum.RenderFidelity.Precise,
-							CollisionFidelity = instance.CollisionFidelity,
-							Anchored = instance.Anchored,
-							CanCollide = instance.CanCollide,
 						},
 					}
 					InstancesOverrides[instance] = override
