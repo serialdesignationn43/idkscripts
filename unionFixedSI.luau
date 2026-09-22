@@ -4960,7 +4960,7 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 						propClass = "Instance"
 					end
 				elseif instance:IsA("UnionOperation") or instance:IsA("PartOperation") then
-					-- Extract the internal streamed MeshId property
+					-- Extract internal streamed MeshId property
 					local meshId = ""
 					if gethiddenproperty then
 						local ok, res = pcall(gethiddenproperty, instance, "MeshId")
@@ -4981,12 +4981,12 @@ local function synsaveinstance(CustomOptions, CustomOptions2)
 						end
 					end
 
-					-- Override class and serialize as a DoubleSided MeshPart
 					class = "MeshPart"
 					propClass = "MeshPart"
 					tagOverride = "MeshPart"
 
 					override = {
+						__Synthetic = true, -- Tells USSI to only read the Properties table below
 						Properties = {
 							Name = instance.Name,
 							MeshId = meshId,
